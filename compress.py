@@ -55,7 +55,6 @@ def compress_image(region: Rect) -> QuadNode:
     # Get the average color of the region
     avg_color: Color = Color(0, 0, 0)
     start = time.perf_counter()
-    total_pixels: int = 0
 
     for x in range(region.sx, region.ex):
         for y in range(region.sy, region.ey):
@@ -65,16 +64,14 @@ def compress_image(region: Rect) -> QuadNode:
             avg_color.r += pixel[0]
             avg_color.g += pixel[1]
             avg_color.b += pixel[2]
-            total_pixels += 1
     final = time.perf_counter()
     time_ms = (final - start) * 1000
-    print(f"Time: {time_ms:.3f} ms")
+    print(f"Avg color calc time: {time_ms:.3f} ms")
 
-    #total_pixels: int = (region.ex - region.sx + 1) * (region.ey - region.sy + 1)
+    total_pixels: int = (region.ex - region.sx) * (region.ey - region.sy)
     avg_color.r /= total_pixels
     avg_color.g /= total_pixels
     avg_color.b /= total_pixels
-    print(f"TOTAL PIXELS: ({total_pixels}) RGB: ({avg_color.r}, {avg_color.g}, {avg_color.b})")
 
     node: QuadNode = QuadNode(region, avg_color)
 
