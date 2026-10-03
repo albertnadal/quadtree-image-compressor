@@ -86,7 +86,8 @@ def compress_image(region: Rect) -> QuadNode:
 
     first_quad_rect: Rect = Rect(region.sx, region.sy, (region.sx+region.ex)//2, (region.sy+region.ey)//2)
     if (region.sx < first_quad_rect.ex) and (region.sy < first_quad_rect.ey):
-        sub_node: QuadNode = compress_image(first_quad_rect)
+        first_sub_node: QuadNode = compress_image(first_quad_rect)
+        sub_node = first_sub_node
         need_fragment = need_fragment or not sub_node.isLeaf()
         if need_fragment or delta_e(sub_node.color, avg_color) >= COLOR_DELTA:
             node.first_node = sub_node
@@ -95,7 +96,8 @@ def compress_image(region: Rect) -> QuadNode:
 
     second_quad_rect: Rect = Rect((region.sx+region.ex)//2, region.sy, region.ex, (region.sy+region.ey)//2)
     if (second_quad_rect.sx < region.ex) and (region.sy < second_quad_rect.ey):
-        sub_node: QuadNode = compress_image(second_quad_rect)
+        second_sub_node: QuadNode = compress_image(second_quad_rect)
+        sub_node = second_sub_node
         need_fragment = need_fragment or not sub_node.isLeaf()
         if need_fragment or delta_e(sub_node.color, avg_color) >= COLOR_DELTA:
             node.second_node = sub_node
@@ -104,7 +106,8 @@ def compress_image(region: Rect) -> QuadNode:
 
     third_quad_rect: Rect = Rect((region.sx+region.ex)//2, (region.sy+region.ey)//2, region.ex, region.ey)
     if (third_quad_rect.sx < region.ex) and (third_quad_rect.sy < region.ey):
-        sub_node: QuadNode = compress_image(third_quad_rect)
+        third_sub_node: QuadNode = compress_image(third_quad_rect)
+        sub_node = third_sub_node
         need_fragment = need_fragment or not sub_node.isLeaf()
         if need_fragment or delta_e(sub_node.color, avg_color) >= COLOR_DELTA:
             node.third_node = sub_node
@@ -113,12 +116,19 @@ def compress_image(region: Rect) -> QuadNode:
 
     forth_quad_rect: Rect = Rect(region.sx, (region.sy+region.ey)//2, (region.sx+region.ex)//2, region.ey)
     if (region.sx < (region.sx+region.ex)//2) and ((region.sy+region.ey)//2 < region.ey):
-        sub_node: QuadNode = compress_image(forth_quad_rect)
+        forth_sub_node: QuadNode = compress_image(forth_quad_rect)
+        sub_node = forth_sub_node
         need_fragment = need_fragment or not sub_node.isLeaf()
         if need_fragment or delta_e(sub_node.color, avg_color) >= COLOR_DELTA:
             node.forth_node = sub_node
             need_fragment = True
             #TODO: store subnode fragmentation codification
+
+    if need_fragment:
+        node.first_node = first_sub_node
+        node.second_node = second_sub_node
+        node.third_node = third_sub_node
+        node.forth_node = forth_sub_node
 
     """
     if need_fragment:
