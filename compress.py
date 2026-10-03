@@ -5,16 +5,18 @@ from dataclasses import dataclass
 from typing import List
 from typing import Optional
 from typing import Tuple
+from typing import BinaryIO
 
 import math
 import sys
 import time
+import struct
 
-COLOR_DELTA = 2.0
+COLOR_DELTA = 6.0
 MAX_RECUSIVE_CALLS = 100
 sys.setrecursionlimit(MAX_RECUSIVE_CALLS)
 
-source_image = Image.open("original.jpg")
+source_image = Image.open("original.bmp")
 source_image = source_image.convert("RGB")
 source_pixels = source_image.load()
 
@@ -66,7 +68,7 @@ def compress_image(region: Rect) -> QuadNode:
             avg_color.b += pixel[2]
     final = time.perf_counter()
     time_ms = (final - start) * 1000
-    print(f"Avg color calc time: {time_ms:.3f} ms")
+    #print(f"Avg color calc time: {time_ms:.3f} ms")
 
     total_pixels: int = (region.ex - region.sx) * (region.ey - region.sy)
     avg_color.r /= total_pixels
@@ -89,7 +91,6 @@ def compress_image(region: Rect) -> QuadNode:
         if need_fragment or delta_e(sub_node.color, avg_color) >= COLOR_DELTA:
             node.first_node = sub_node
             need_fragment = True
-            #TODO: store subnode fragmentation codification
 
     second_quad_rect: Rect = Rect((region.sx+region.ex)//2, region.sy, region.ex, (region.sy+region.ey)//2)
     if (second_quad_rect.sx < region.ex) and (region.sy < second_quad_rect.ey):
@@ -99,7 +100,6 @@ def compress_image(region: Rect) -> QuadNode:
         if need_fragment or delta_e(sub_node.color, avg_color) >= COLOR_DELTA:
             node.second_node = sub_node
             need_fragment = True
-            #TODO: store subnode fragmentation codification
 
     third_quad_rect: Rect = Rect((region.sx+region.ex)//2, (region.sy+region.ey)//2, region.ex, region.ey)
     if (third_quad_rect.sx < region.ex) and (third_quad_rect.sy < region.ey):
@@ -109,7 +109,6 @@ def compress_image(region: Rect) -> QuadNode:
         if need_fragment or delta_e(sub_node.color, avg_color) >= COLOR_DELTA:
             node.third_node = sub_node
             need_fragment = True
-            #TODO: store subnode fragmentation codification
 
     forth_quad_rect: Rect = Rect(region.sx, (region.sy+region.ey)//2, (region.sx+region.ex)//2, region.ey)
     if (region.sx < (region.sx+region.ex)//2) and ((region.sy+region.ey)//2 < region.ey):
@@ -119,7 +118,6 @@ def compress_image(region: Rect) -> QuadNode:
         if need_fragment or delta_e(sub_node.color, avg_color) >= COLOR_DELTA:
             node.forth_node = sub_node
             need_fragment = True
-            #TODO: store subnode fragmentation codification
 
     if need_fragment:
         node.first_node = first_sub_node
@@ -154,11 +152,47 @@ def render_node_to_image(node: QuadNode, image: ImageDraw.ImageDraw):
     if node.forth_node is not None:
         render_node_to_image(node.forth_node, image)
 
-def render_quadtree_to_file(node: QuadNode, width: int, height: int, filename: str):
+def render_quadtree_to_image_file(node: QuadNode, width: int, height: int, filename: str):
     image = Image.new("RGB", (width, height), "white")
     image_draw = ImageDraw.Draw(image)
     render_node_to_image(node, image_draw)
     image.save(filename)
 
 root_node: QuadNode = compress_image(Rect(0, 0, source_image.width, source_image.height))
-render_quadtree_to_file(root_node, source_image.width, source_image.height, "out.png")
+render_quadtree_to_image_file(root_node, source_image.width, source_image.height, "out.png")
+
+def save_node_to_file(node: QuadNode, file: BinaryIO):
+    file.write(struct.pack("<BBB", int(node.color.r), int(node.color.g), int(node.color.b))) # Save the node color using 3 bytes
+    sub_nodes_flags: int = 0
+    if node.first_node is not None:
+        sub_nodes_flags |= 1 << 3
+
+    if node.second_node is not None:
+        sub_nodes_flags |= 1 << 2
+
+    if node.third_node is not None:
+        sub_nodes_flags |= 1 << 1
+
+    if node.forth_node is not None:
+        sub_nodes_flags |= 1 << 0
+
+    file.write(struct.pack("<B", sub_nodes_flags)) # Use 1 byte to save the subnode flags to indicate wich subnodes are stored 
+
+    if node.first_node is not None:
+        save_node_to_file(node.first_node, file)
+
+    if node.second_node is not None:
+        save_node_to_file(node.second_node, file)
+
+    if node.third_node is not None:
+        save_node_to_file(node.third_node, file)
+
+    if node.forth_node is not None:
+        save_node_to_file(node.forth_node, file)
+
+def save_quadtree(node: QuadNode, filename: str):
+    with open(filename, "wb") as file:
+        file.write(struct.pack("<HH", node.region.ex - node.region.sx, node.region.ey - node.region.sy)) # Save image width and height using two 16 bytes unsigned integers
+        save_node_to_file(node, file)
+
+save_quadtree(root_node, "image.dat")
