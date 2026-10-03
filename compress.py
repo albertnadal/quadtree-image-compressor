@@ -10,7 +10,7 @@ import math
 import sys
 import time
 
-COLOR_DELTA = 6.0
+COLOR_DELTA = 2.0
 MAX_RECUSIVE_CALLS = 100
 sys.setrecursionlimit(MAX_RECUSIVE_CALLS)
 
@@ -93,7 +93,7 @@ def compress_image(region: Rect) -> QuadNode:
             need_fragment = True
             #TODO: store subnode fragmentation codification
 
-    second_quad_rect: Rect = Rect(((region.sx+region.ex)//2) + 1, region.sy, region.ex, (region.sy+region.ey)//2)
+    second_quad_rect: Rect = Rect((region.sx+region.ex)//2, region.sy, region.ex, (region.sy+region.ey)//2)
     if (second_quad_rect.sx < region.ex) and (region.sy < second_quad_rect.ey):
         sub_node: QuadNode = compress_image(second_quad_rect)
         need_fragment = need_fragment or not sub_node.isLeaf()
@@ -102,7 +102,7 @@ def compress_image(region: Rect) -> QuadNode:
             need_fragment = True
             #TODO: store subnode fragmentation codification
 
-    third_quad_rect: Rect = Rect((region.sx+region.ex)//2 + 1, (region.sy+region.ey)//2 + 1, region.ex, region.ey)
+    third_quad_rect: Rect = Rect((region.sx+region.ex)//2, (region.sy+region.ey)//2, region.ex, region.ey)
     if (third_quad_rect.sx < region.ex) and (third_quad_rect.sy < region.ey):
         sub_node: QuadNode = compress_image(third_quad_rect)
         need_fragment = need_fragment or not sub_node.isLeaf()
@@ -111,8 +111,8 @@ def compress_image(region: Rect) -> QuadNode:
             need_fragment = True
             #TODO: store subnode fragmentation codification
 
-    forth_quad_rect: Rect = Rect(region.sx, (region.sy+region.ey)//2 + 1, (region.sx+region.ex)//2, region.ey)
-    if (region.sx < (region.sx+region.ex)//2) and ((region.sy+region.ey)//2 + 1 < region.ey):
+    forth_quad_rect: Rect = Rect(region.sx, (region.sy+region.ey)//2, (region.sx+region.ex)//2, region.ey)
+    if (region.sx < (region.sx+region.ex)//2) and ((region.sy+region.ey)//2 < region.ey):
         sub_node: QuadNode = compress_image(forth_quad_rect)
         need_fragment = need_fragment or not sub_node.isLeaf()
         if need_fragment or delta_e(sub_node.color, avg_color) >= COLOR_DELTA:
@@ -131,8 +131,8 @@ def compress_image(region: Rect) -> QuadNode:
 
 def render_node_to_image(node: QuadNode, image: ImageDraw.ImageDraw):
     if node.isLeaf():
-        image.rectangle((node.region.sx, node.region.sy, node.region.ex, node.region.ey), fill=(int(node.color.r), int(node.color.g), int(node.color.b)))
-        #image.rectangle((node.region.sx, node.region.sy, node.region.ex, node.region.ey), outline=(0, 0, 0), width=1)
+        image.rectangle((node.region.sx, node.region.sy, node.region.ex - 1, node.region.ey - 1), fill=(int(node.color.r), int(node.color.g), int(node.color.b)))
+        #image.rectangle((node.region.sx, node.region.sy, node.region.ex - 1, node.region.ey - 1), outline=(0, 0, 0), width=1)
         return
 
     if node.first_node is not None:
@@ -153,5 +153,5 @@ def render_quadtree_to_file(node: QuadNode, width: int, height: int, filename: s
     render_node_to_image(node, image_draw)
     image.save(filename)
 
-root_node: QuadNode = compress_image(Rect(0, 0, source_image.width - 1, source_image.height - 1))
+root_node: QuadNode = compress_image(Rect(0, 0, source_image.width, source_image.height))
 render_quadtree_to_file(root_node, source_image.width, source_image.height, "out.png")
