@@ -161,38 +161,75 @@ def render_quadtree_to_image_file(node: QuadNode, width: int, height: int, filen
 root_node: QuadNode = compress_image(Rect(0, 0, source_image.width, source_image.height))
 render_quadtree_to_image_file(root_node, source_image.width, source_image.height, "out.png")
 
-def save_node_to_file(node: QuadNode, file: BinaryIO):
-    file.write(struct.pack("<BBB", int(node.color.r), int(node.color.g), int(node.color.b))) # Save the node color using 3 bytes
-    sub_nodes_flags: int = 0
-    if node.first_node is not None:
-        sub_nodes_flags |= 1 << 3
-
-    if node.second_node is not None:
-        sub_nodes_flags |= 1 << 2
-
-    if node.third_node is not None:
-        sub_nodes_flags |= 1 << 1
-
-    if node.forth_node is not None:
-        sub_nodes_flags |= 1 << 0
-
-    file.write(struct.pack("<B", sub_nodes_flags)) # Use 1 byte to save the subnode flags to indicate wich subnodes are stored 
-
-    if node.first_node is not None:
-        save_node_to_file(node.first_node, file)
-
-    if node.second_node is not None:
-        save_node_to_file(node.second_node, file)
-
-    if node.third_node is not None:
-        save_node_to_file(node.third_node, file)
-
-    if node.forth_node is not None:
-        save_node_to_file(node.forth_node, file)
-
 def save_quadtree(node: QuadNode, filename: str):
     with open(filename, "wb") as file:
         file.write(struct.pack("<HH", node.region.ex - node.region.sx, node.region.ey - node.region.sy)) # Save image width and height using two 16 bytes unsigned integers
-        save_node_to_file(node, file)
+
+        def save_node(node: QuadNode, file: BinaryIO):
+            file.write(struct.pack("<BBB", int(node.color.r), int(node.color.g), int(node.color.b))) # Save the node color using 3 bytes
+            sub_nodes_flags: int = 0
+            if node.first_node is not None:
+                sub_nodes_flags |= 1 << 3
+
+            if node.second_node is not None:
+                sub_nodes_flags |= 1 << 2
+
+            if node.third_node is not None:
+                sub_nodes_flags |= 1 << 1
+
+            if node.forth_node is not None:
+                sub_nodes_flags |= 1 << 0
+
+            file.write(struct.pack("<B", sub_nodes_flags)) # Use 1 byte to save the subnode flags to indicate wich subnodes are stored 
+
+            if node.first_node is not None:
+                save_node(node.first_node, file)
+
+            if node.second_node is not None:
+                save_node(node.second_node, file)
+
+            if node.third_node is not None:
+                save_node(node.third_node, file)
+
+            if node.forth_node is not None:
+                save_node(node.forth_node, file)
+
+        save_node(node, file)
 
 save_quadtree(root_node, "image.dat")
+
+def load_quadtree(filename: str) -> QuadNode:
+    with open(filename, "rb") as file:
+        width, height = struct.unpack("<HH", file.read(4))
+
+        def load_node(file: BinaryIO, region: Rect) -> QuadNode:
+            r, g, b = struct.unpack("<BBB", file.read(3))
+            color: Color = Color(r, g, b)
+            node: QuadNode = QuadNode(region, color)
+            sub_nodes_flags: int = struct.unpack("<B", file.read(1))[0]
+
+            mid_x: int = (region.sx + region.ex) // 2
+            mid_y: int = (region.sy + region.ey) // 2
+
+            if sub_nodes_flags & (1 << 3):
+                first_quad_rect: Rect = Rect(region.sx, region.sy, mid_x, mid_y)
+                node.first_node = load_node(file, first_quad_rect)
+
+            if sub_nodes_flags & (1 << 2):
+                second_quad_rect: Rect = Rect(mid_x, region.sy, region.ex, mid_y)
+                node.second_node = load_node(file, second_quad_rect)
+
+            if sub_nodes_flags & (1 << 1):
+                third_quad_rect: Rect = Rect(mid_x, mid_y, region.ex, region.ey)
+                node.third_node = load_node(file, third_quad_rect)
+
+            if sub_nodes_flags & (1 << 0):
+                forth_quad_rect: Rect = Rect(region.sx, mid_y, mid_x, region.ey)
+                node.forth_node = load_node(file, forth_quad_rect)
+
+            return node
+
+        root_region: Rect = Rect(0, 0, width, height)
+        return load_node(file, root_region)
+
+loaded_node: QuadNode = load_quadtree("image.dat")
