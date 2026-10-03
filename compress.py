@@ -14,12 +14,12 @@ COLOR_DELTA = 6.0
 MAX_RECUSIVE_CALLS = 100
 sys.setrecursionlimit(MAX_RECUSIVE_CALLS)
 
-image = Image.open("original.jpg")
-image = image.convert("RGB")
-pixels = image.load()
+source_image = Image.open("original.jpg")
+source_image = source_image.convert("RGB")
+source_pixels = source_image.load()
 
-image_tree = image.copy()
-image_tree_draw = ImageDraw.Draw(image_tree)
+#image_tree = source_image.copy()
+#image_tree_draw = ImageDraw.Draw(image_tree)
 
 @dataclass
 class Rect:
@@ -43,12 +43,15 @@ class QuadNode:
         self.third_node = None
         self.forth_node = None
 
+    def isLeaf(self) -> bool:
+        return self.first_node is None and self.second_node is None and self.third_node is None and self.forth_node is None
+
 def delta_e(rgb1: Color, rgb2: Color):
     lab1 = rgb2lab(np.array([rgb1.r, rgb1.g, rgb1.b]).reshape(1, 1, 3) / 255)
     lab2 = rgb2lab(np.array([rgb2.r, rgb2.g, rgb2.b]).reshape(1, 1, 3) / 255)
     return float(deltaE_ciede2000(lab1, lab2)[0, 0])
 
-def compress_image(region: Rect) -> Tuple[bool, Color]:
+def compress_image(region: Rect) -> QuadNode:
     # Get the average color of the region
     avg_color: Color = Color(0, 0, 0)
     start = time.perf_counter()
@@ -58,7 +61,7 @@ def compress_image(region: Rect) -> Tuple[bool, Color]:
         for y in range(region.sy, region.ey):
             # TODO: Next lines are O(n). We refactor de the code by avoiding recalculate
             #       pixel sums by using a 2D prefix sum (integral images) with an O(1) cost.
-            pixel: Tuple[int, int, int] = pixels[x, y]
+            pixel: Tuple[int, int, int] = source_pixels[x, y]
             avg_color.r += pixel[0]
             avg_color.g += pixel[1]
             avg_color.b += pixel[2]
@@ -73,59 +76,82 @@ def compress_image(region: Rect) -> Tuple[bool, Color]:
     avg_color.b /= total_pixels
     print(f"TOTAL PIXELS: ({total_pixels}) RGB: ({avg_color.r}, {avg_color.g}, {avg_color.b})")
 
+    node: QuadNode = QuadNode(region, avg_color)
+
     if (region.ex - region.sx <= 1) or (region.ey - region.sy <= 1):
         # A leaf node has been reached
-        return (False, avg_color)
+        return node
 
     need_fragment: bool = False
 
     first_quad_rect: Rect = Rect(region.sx, region.sy, (region.sx+region.ex)//2, (region.sy+region.ey)//2)
     if (region.sx < first_quad_rect.ex) and (region.sy < first_quad_rect.ey):
-        avg_color_first_quad: Color
-        fragmented: bool
-        (fragmented, avg_color_first_quad) = compress_image(first_quad_rect)
-        need_fragment = need_fragment | fragmented
-        if delta_e(avg_color_first_quad, avg_color) >= COLOR_DELTA:
+        sub_node: QuadNode = compress_image(first_quad_rect)
+        need_fragment = need_fragment or not sub_node.isLeaf()
+        if need_fragment or delta_e(sub_node.color, avg_color) >= COLOR_DELTA:
+            node.first_node = sub_node
             need_fragment = True
             #TODO: store subnode fragmentation codification
 
     second_quad_rect: Rect = Rect(((region.sx+region.ex)//2) + 1, region.sy, region.ex, (region.sy+region.ey)//2)
     if (second_quad_rect.sx < region.ex) and (region.sy < second_quad_rect.ey):
-        avg_color_second_quad: Color
-        fragmented: bool
-        (fragmented, avg_color_second_quad) = compress_image(second_quad_rect)
-        need_fragment = need_fragment | fragmented
-        if need_fragment or delta_e(avg_color_second_quad, avg_color) >= COLOR_DELTA:
+        sub_node: QuadNode = compress_image(second_quad_rect)
+        need_fragment = need_fragment or not sub_node.isLeaf()
+        if need_fragment or delta_e(sub_node.color, avg_color) >= COLOR_DELTA:
+            node.second_node = sub_node
             need_fragment = True
             #TODO: store subnode fragmentation codification
 
     third_quad_rect: Rect = Rect((region.sx+region.ex)//2 + 1, (region.sy+region.ey)//2 + 1, region.ex, region.ey)
     if (third_quad_rect.sx < region.ex) and (third_quad_rect.sy < region.ey):
-        avg_color_third_quad: Color
-        fragmented: bool
-        (fragmented, avg_color_third_quad) = compress_image(third_quad_rect)
-        need_fragment = need_fragment | fragmented
-        if need_fragment or delta_e(avg_color_third_quad, avg_color) >= COLOR_DELTA:
+        sub_node: QuadNode = compress_image(third_quad_rect)
+        need_fragment = need_fragment or not sub_node.isLeaf()
+        if need_fragment or delta_e(sub_node.color, avg_color) >= COLOR_DELTA:
+            node.third_node = sub_node
             need_fragment = True
             #TODO: store subnode fragmentation codification
 
     forth_quad_rect: Rect = Rect(region.sx, (region.sy+region.ey)//2 + 1, (region.sx+region.ex)//2, region.ey)
     if (region.sx < (region.sx+region.ex)//2) and ((region.sy+region.ey)//2 + 1 < region.ey):
-        avg_color_forth_quad: Color
-        fragmented: bool
-        (fragmented, avg_color_forth_quad) = compress_image(forth_quad_rect)
-        need_fragment = need_fragment | fragmented
-        if need_fragment or delta_e(avg_color_forth_quad, avg_color) >= COLOR_DELTA:
+        sub_node: QuadNode = compress_image(forth_quad_rect)
+        need_fragment = need_fragment or not sub_node.isLeaf()
+        if need_fragment or delta_e(sub_node.color, avg_color) >= COLOR_DELTA:
+            node.forth_node = sub_node
             need_fragment = True
             #TODO: store subnode fragmentation codification
 
+    """
     if need_fragment:
         image_tree_draw.rectangle((first_quad_rect.sx, first_quad_rect.sy, first_quad_rect.ex, first_quad_rect.ey), outline=(0, 0, 0), width=1)
         image_tree_draw.rectangle((second_quad_rect.sx, second_quad_rect.sy, second_quad_rect.ex, second_quad_rect.ey), outline=(0, 0, 0), width=1)
         image_tree_draw.rectangle((third_quad_rect.sx, third_quad_rect.sy, third_quad_rect.ex, third_quad_rect.ey), outline=(0, 0, 0), width=1)
         image_tree_draw.rectangle((forth_quad_rect.sx, forth_quad_rect.sy, forth_quad_rect.ex, forth_quad_rect.ey), outline=(0, 0, 0), width=1)
+    """
+    return node
 
-    return (need_fragment, avg_color)
+def render_node_to_image(node: QuadNode, image: ImageDraw.ImageDraw):
+    if node.isLeaf():
+        image.rectangle((node.region.sx, node.region.sy, node.region.ex, node.region.ey), fill=(int(node.color.r), int(node.color.g), int(node.color.b)))
+        #image.rectangle((node.region.sx, node.region.sy, node.region.ex, node.region.ey), outline=(0, 0, 0), width=1)
+        return
 
-compress_image(Rect(0, 0, image.width - 1, image.height - 1))
-image_tree.save("out.png")
+    if node.first_node is not None:
+        render_node_to_image(node.first_node, image)
+
+    if node.second_node is not None:
+        render_node_to_image(node.second_node, image)
+
+    if node.third_node is not None:
+        render_node_to_image(node.third_node, image)
+
+    if node.forth_node is not None:
+        render_node_to_image(node.forth_node, image)
+
+def render_quadtree_to_file(node: QuadNode, width: int, height: int, filename: str):
+    image = Image.new("RGB", (width, height), "white")
+    image_draw = ImageDraw.Draw(image)
+    render_node_to_image(node, image_draw)
+    image.save(filename)
+
+root_node: QuadNode = compress_image(Rect(0, 0, source_image.width - 1, source_image.height - 1))
+render_quadtree_to_file(root_node, source_image.width, source_image.height, "out.png")
