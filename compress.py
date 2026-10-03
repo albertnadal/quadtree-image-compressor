@@ -28,14 +28,29 @@ class Rect:
     ex: int
     ey: int
 
-def delta_e(rgb1, rgb2):
-    lab1 = rgb2lab(np.array(rgb1).reshape(1, 1, 3) / 255)
-    lab2 = rgb2lab(np.array(rgb2).reshape(1, 1, 3) / 255)
+@dataclass
+class Color:
+    r: float
+    g: float
+    b: float
+
+class QuadNode:
+    def __init__(self, region: Rect, color: Color):
+        self.region = region
+        self.color = color
+        self.first_node = None
+        self.second_node = None
+        self.third_node = None
+        self.forth_node = None
+
+def delta_e(rgb1: Color, rgb2: Color):
+    lab1 = rgb2lab(np.array([rgb1.r, rgb1.g, rgb1.b]).reshape(1, 1, 3) / 255)
+    lab2 = rgb2lab(np.array([rgb2.r, rgb2.g, rgb2.b]).reshape(1, 1, 3) / 255)
     return float(deltaE_ciede2000(lab1, lab2)[0, 0])
 
-def compress_image(region: Rect) -> Tuple[bool, List[float]]:
+def compress_image(region: Rect) -> Tuple[bool, Color]:
     # Get the average color of the region
-    avg_color: List[float] = [0, 0, 0]
+    avg_color: Color = Color(0, 0, 0)
     start = time.perf_counter()
     total_pixels: int = 0
 
@@ -43,21 +58,20 @@ def compress_image(region: Rect) -> Tuple[bool, List[float]]:
         for y in range(region.sy, region.ey):
             # TODO: Next lines are O(n). We refactor de the code by avoiding recalculate
             #       pixel sums by using a 2D prefix sum (integral images) with an O(1) cost.
-            #print(f"({x},{y})")
             pixel: Tuple[int, int, int] = pixels[x, y]
-            avg_color[0] += pixel[0]
-            avg_color[1] += pixel[1]
-            avg_color[2] += pixel[2]
+            avg_color.r += pixel[0]
+            avg_color.g += pixel[1]
+            avg_color.b += pixel[2]
             total_pixels += 1
     final = time.perf_counter()
     time_ms = (final - start) * 1000
     print(f"Time: {time_ms:.3f} ms")
 
     #total_pixels: int = (region.ex - region.sx + 1) * (region.ey - region.sy + 1)
-    avg_color[0] /= total_pixels
-    avg_color[1] /= total_pixels
-    avg_color[2] /= total_pixels
-    print(f"TOTAL PIXELS: ({total_pixels}) RGB: ({avg_color[0]}, {avg_color[1]}, {avg_color[2]})")
+    avg_color.r /= total_pixels
+    avg_color.g /= total_pixels
+    avg_color.b /= total_pixels
+    print(f"TOTAL PIXELS: ({total_pixels}) RGB: ({avg_color.r}, {avg_color.g}, {avg_color.b})")
 
     if (region.ex - region.sx <= 1) or (region.ey - region.sy <= 1):
         # A leaf node has been reached
@@ -67,7 +81,7 @@ def compress_image(region: Rect) -> Tuple[bool, List[float]]:
 
     first_quad_rect: Rect = Rect(region.sx, region.sy, (region.sx+region.ex)//2, (region.sy+region.ey)//2)
     if (region.sx < first_quad_rect.ex) and (region.sy < first_quad_rect.ey):
-        avg_color_first_quad: List[float]
+        avg_color_first_quad: Color
         fragmented: bool
         (fragmented, avg_color_first_quad) = compress_image(first_quad_rect)
         need_fragment = need_fragment | fragmented
@@ -77,7 +91,7 @@ def compress_image(region: Rect) -> Tuple[bool, List[float]]:
 
     second_quad_rect: Rect = Rect(((region.sx+region.ex)//2) + 1, region.sy, region.ex, (region.sy+region.ey)//2)
     if (second_quad_rect.sx < region.ex) and (region.sy < second_quad_rect.ey):
-        avg_color_second_quad: List[float]
+        avg_color_second_quad: Color
         fragmented: bool
         (fragmented, avg_color_second_quad) = compress_image(second_quad_rect)
         need_fragment = need_fragment | fragmented
@@ -87,7 +101,7 @@ def compress_image(region: Rect) -> Tuple[bool, List[float]]:
 
     third_quad_rect: Rect = Rect((region.sx+region.ex)//2 + 1, (region.sy+region.ey)//2 + 1, region.ex, region.ey)
     if (third_quad_rect.sx < region.ex) and (third_quad_rect.sy < region.ey):
-        avg_color_third_quad: List[float]
+        avg_color_third_quad: Color
         fragmented: bool
         (fragmented, avg_color_third_quad) = compress_image(third_quad_rect)
         need_fragment = need_fragment | fragmented
@@ -97,7 +111,7 @@ def compress_image(region: Rect) -> Tuple[bool, List[float]]:
 
     forth_quad_rect: Rect = Rect(region.sx, (region.sy+region.ey)//2 + 1, (region.sx+region.ex)//2, region.ey)
     if (region.sx < (region.sx+region.ex)//2) and ((region.sy+region.ey)//2 + 1 < region.ey):
-        avg_color_forth_quad: List[float]
+        avg_color_forth_quad: Color
         fragmented: bool
         (fragmented, avg_color_forth_quad) = compress_image(forth_quad_rect)
         need_fragment = need_fragment | fragmented
