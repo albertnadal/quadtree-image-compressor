@@ -196,7 +196,7 @@ def save_quadtree(node: QuadNode, filename: str):
 
         save_node(node, file)
 
-save_quadtree(root_node, "image.dat")
+save_quadtree(root_node, "compressed.dat")
 
 def load_quadtree(filename: str) -> QuadNode:
     with open(filename, "rb") as file:
@@ -232,4 +232,4 @@ def load_quadtree(filename: str) -> QuadNode:
         root_region: Rect = Rect(0, 0, width, height)
         return load_node(file, root_region)
 
-loaded_node: QuadNode = load_quadtree("image.dat")
+loaded_node: QuadNode = load_quadtree("compressed.dat")
